@@ -1,0 +1,90 @@
+/* Query 1 - query used for the first insight */
+/* this table preparing the data(film name, category name, rental id) for the query below */
+WITH base_table AS 
+	(SELECT f.title AS film_title, 
+	     c.name AS category_name,
+	     r.rental_id AS rental_id
+         FROM film f
+         JOIN film_category fc
+            ON fc.film_id = f.film_id
+         JOIN category c
+            ON c.category_id = fc.category_id AND
+                c.name IN ('Music','Family','Comedy','Classics','Children','Animation')
+         JOIN inventory i
+            ON f.film_id = i.film_id
+         JOIN rental r
+	 ON i.inventory_id = r.inventory_id)
+
+/* the query that calculates the 
+number of times it has been rented out and return the result
+with the category name and film title*/
+SELECT DISTINCT(film_title), category_name,
+  COUNT(rental_id) OVER (PARTITION BY film_title) AS rental_count
+   FROM base_table
+   ORDER BY 2,1
+
+/* Query 2 - query used for the second insight */
+/* CTE that contains films title with category name, 
+and retal duration for the query below */
+WITH family_movies_with_rentals AS 
+	(SELECT f.title AS film_title, 
+		c.name AS category_name,
+	 	rental_duration
+ 	FROM film f
+	JOIN film_category fc
+	   ON fc.film_id = f.film_id
+	JOIN category c
+           ON c.category_id = fc.category_id AND
+		c.name IN ('Music','Family','Comedy','Classics','Children','Animation'))
+
+/*query that divide them into 4 levels based on the quartiles (25%, 50%, 75%) 
+of the average rental duration(in the number of days) for movies across all categories*/
+SELECT film_title, category_name,rental_duration,
+	NTILE(4) OVER (ORDER BY rental_duration) AS standard_quartile 
+  FROM family_movies_with_rentals
+  ORDER BY 3
+
+/* Query 3 - query used for the third insight */ 
+WITH family_movies_with_rentals AS 
+	(SELECT f.title AS film_title,
+     c.name AS category_name, rental_duration
+FROM film f
+JOIN film_category fc
+ON fc.film_id = f.film_id
+JOIN category c
+ON c.category_id = fc.category_id AND
+	c.name IN 	('Music','Family','Comedy','Classics','Children','Animation'))
+,
+/* CTE that divides the data into 4 quartiles*/ 
+t1 AS ( 
+SELECT film_title, category_name,rental_duration,
+NTILE(4) OVER (ORDER BY rental_duration) AS standard_quartile 
+FROM family_movies_with_rentals)
+/* calculating the count of movies 
+within each combination of 
+film category for each corresponding rental duration category*/
+ SELECT category_name AS name, standard_quartile,
+	 COUNT(film_title) as count
+ FROM t1
+ GROUP BY 2,1          
+ ORDER BY 1,2
+           
+
+           
+
+           
+/* Query 4 - query used for the fourth insight */
+/* query that returns the store ID for the store, the year 
+and month and the number of rental orders each store has 
+fulfilled for that month*/
+SELECT DATE_PART('month', r.rental_date) AS Rental_month,
+	DATE_PART('year', r.rental_date) AS Rental_year,
+	s.store_id AS Store_ID, 
+	COUNT(r.rental_date) AS count_rentals
+FROM store s 
+JOIN staff st
+	ON s.store_id = st.store_id
+JOIN rental r
+	ON r.staff_id = st.staff_id
+GROUP BY 1,2,3
+ORDER BY 4 DESC
